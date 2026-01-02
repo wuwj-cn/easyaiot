@@ -13,7 +13,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import cv2
 import numpy as np
-from paddleocr import PaddleOCR
+
+# 尝试导入PaddleOCR，使其成为可选依赖
+try:
+    from paddleocr import PaddleOCR
+    PADDLE_OCR_AVAILABLE = True
+except ImportError:
+    PaddleOCR = None
+    PADDLE_OCR_AVAILABLE = False
 
 from app.services.minio_service import ModelService
 from db_models import OCRResult, db
@@ -56,6 +63,9 @@ class OCRService:
 
     def _get_ocr_instance(self):
         """获取当前线程的OCR实例（线程安全）"""
+        if not PADDLE_OCR_AVAILABLE:
+            raise ImportError("PaddleOCR未安装，无法使用OCR功能")
+            
         if not hasattr(self.thread_local, 'ocr_engine'):
             try:
                 self.thread_local.ocr_engine = PaddleOCR(
@@ -79,6 +89,9 @@ class OCRService:
         """
         识别图片中的文字（线程安全版本）
         """
+        if not PADDLE_OCR_AVAILABLE:
+            raise ImportError("PaddleOCR未安装，无法使用OCR功能")
+            
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"图片文件不存在: {image_path}")
 
@@ -535,6 +548,9 @@ class OCRService:
         Returns:
             Tuple[bool, str]: (是否成功, 消息)
         """
+        if not PADDLE_OCR_AVAILABLE:
+            return False, "PaddleOCR未安装，无法使用OCR功能"
+            
         try:
             # 创建测试图像
             test_image = np.zeros((100, 100, 3), dtype=np.uint8)
@@ -560,12 +576,27 @@ class OCRService:
         Returns:
             Dict[str, Any]: 性能指标字典
         """
+        if not PADDLE_OCR_AVAILABLE:
+            return {
+                "engine_initialized": False,
+                "rec_model_name": "unknown",
+                "det_model_name": "unknown",
+                "lang": "unknown",
+                "using_gpu": False,
+                "available": False,
+                "message": "PaddleOCR未安装"
+            }
+            
+        # 检查是否有OCR引擎实例
+        has_engine = hasattr(self.thread_local, 'ocr_engine') and self.thread_local.ocr_engine is not None
+        
         return {
-            "engine_initialized": self.ocr_engine is not None,
-            "rec_model_name": self.rec_model_name,
-            "det_model_name": self.det_model_name,
-            "lang": self.lang,
-            "using_gpu": self.use_gpu
+            "engine_initialized": has_engine,
+            "rec_model_name": self.model_config.get('rec_model_name', 'PP-OCRv5_server_rec'),
+            "det_model_name": self.model_config.get('det_model_name', 'PP-OCRv5_server_det'),
+            "lang": self.model_config.get('lang', 'ch'),
+            "using_gpu": self.model_config.get('device') != 'cpu',
+            "available": True
         }
 
     def preprocess_image(self, image_path: str, output_path: str = None) -> str:

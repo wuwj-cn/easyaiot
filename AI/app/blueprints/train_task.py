@@ -25,7 +25,7 @@ def train_tasks():
         # 获取分页参数和模型名称过滤
         page_no = int(request.args.get('pageNo', 1))
         page_size = int(request.args.get('pageSize', 10))
-        model_id = int(request.args.get('model_id'))  # 转换为整数
+        model_id = request.args.get('modelId')  
         model_name = request.args.get('model_name')  # 参数名改为 model_name
         status_filter = request.args.get('status')
 
@@ -36,10 +36,13 @@ def train_tasks():
                 'msg': '参数错误：pageNo和pageSize必须为正整数'
             }), 400
 
-        # 构建基础查询（关联 Model 表）
+        # 构建基础查询（关联 Model 表），添加JOIN条件避免笛卡尔积
         query = db.session.query(
             TrainTask,
             Model.name.label('model_name')  # 明确获取模型名称
+        ).join(
+            Model,  # 关联Model表
+            TrainTask.model_id == Model.id  # 指定JOIN条件
         )
 
         # 应用模型 ID 过滤
@@ -52,7 +55,7 @@ def train_tasks():
             query = query.filter(Model.name.ilike(f'%{model_name}%'))
 
         # 应用状态过滤
-        if status_filter in ['running', 'completed', 'failed']:
+        if status_filter in ['idle', 'preparing', 'Train', 'completed', 'stopped', 'error']:
             query = query.filter(TrainTask.status == status_filter)
 
         # 按开始时间倒序排列

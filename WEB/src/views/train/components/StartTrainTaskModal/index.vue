@@ -54,6 +54,15 @@
             </option>
           </select>
         </div>
+
+        <div class="param-group">
+          <label>是否使用GPU</label>
+          <select v-model="params.useGpu" class="resource-select">
+            <option value="false">否</option>
+            <option value="true">是</option>
+          </select>
+          <span class="hint">使用GPU可加速训练</span>
+        </div>
       </div>
     </div>
     <template #footer>
@@ -103,7 +112,8 @@ const [registerModal, { closeModal }] = useModalInner(() => {
 const params = reactive({
   epochs: 100,
   batch_size: 16,
-  imgsz: 640
+  imgsz: 640,
+  useGpu: 'false'
 })
 
 const modelList = ref<ModelItem[]>([])
@@ -147,8 +157,10 @@ const startTrain = () => {
     return
   }
   const modelPath = selectedModel.value || 'yolov8n.pt'
+  // 将useGpu转换为use_gpu，符合后端接口要求
   const config = {
     ...params,
+    use_gpu: params.useGpu === 'true', // 转换为布尔值
     modelPath,
     datasetPath: selectedDataset.value
   }
