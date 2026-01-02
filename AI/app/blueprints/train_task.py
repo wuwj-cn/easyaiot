@@ -25,6 +25,7 @@ def train_tasks():
         # 获取分页参数和模型名称过滤
         page_no = int(request.args.get('pageNo', 1))
         page_size = int(request.args.get('pageSize', 10))
+        model_id = int(request.args.get('model_id'))  # 转换为整数
         model_name = request.args.get('model_name')  # 参数名改为 model_name
         status_filter = request.args.get('status')
 
@@ -41,6 +42,10 @@ def train_tasks():
             Model.name.label('model_name')  # 明确获取模型名称
         )
 
+        # 应用模型 ID 过滤
+        if model_id:
+            query = query.filter(TrainTask.model_id == model_id)
+        
         # 应用模型名称模糊匹配
         if model_name:
             # 使用 ilike 实现不区分大小写的模糊查询
