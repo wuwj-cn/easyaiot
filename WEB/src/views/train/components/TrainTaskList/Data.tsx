@@ -157,10 +157,12 @@ export function getFormConfig(): Partial<FormProps> {
         componentProps: {
           options: [
             {label: '全部', value: ''},
-            {label: '运行中', value: 'running'},
+            {label: '等待开始', value: 'idle'},
+            {label: '准备中', value: 'preparing'},
+            {label: '训练中', value: 'Train'},
             {label: '已完成', value: 'completed'},
-            {label: '失败', value: 'failed'},
             {label: '已停止', value: 'stopped'},
+            {label: '失败', value: 'error'},
           ],
         },
       },

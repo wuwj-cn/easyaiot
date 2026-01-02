@@ -9,6 +9,7 @@ import socket
 import uuid
 import logging
 from datetime import datetime
+from typing import Union
 
 from db_models import db, Model, AIService, beijing_now
 from .deploy_daemon import DeployServiceDaemon
@@ -112,7 +113,7 @@ def _find_available_port(start_port=8000, max_attempts=100, exclude_ports=None):
     return None
 
 
-def _download_model_to_local(model_path: str, model_id: int) -> tuple[str | None, str | None]:
+def _download_model_to_local(model_path: str, model_id: int) -> tuple[Union[str, None], Union[str, None]]:
     """下载模型文件到本地（如果是MinIO URL）
     
     Args:

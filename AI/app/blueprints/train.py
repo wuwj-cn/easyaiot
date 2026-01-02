@@ -20,9 +20,43 @@ from db_models import db, Model, TrainTask
 
 train_bp = Blueprint('train', __name__)
 
-# 全局训练状态和进程
+# 全局训练状态、进程和模型实例
 train_status = {}
 train_processes = {}
+train_models = {}
+
+
+def cleanup_train_processes():
+    """清理所有训练进程"""
+    import multiprocessing
+    import time
+    
+    global train_processes
+    
+    # 终止所有训练进程
+    for model_id, train_process in list(train_processes.items()):
+        try:
+            if isinstance(train_process, multiprocessing.Process) and train_process.is_alive():
+                print(f"📌 终止训练进程，进程ID: {train_process.pid}, 项目ID: {model_id}")
+                train_process.terminate()
+                # 等待进程结束，超时5秒
+                train_process.join(timeout=5)
+                # 如果进程仍在运行，强制杀死
+                if train_process.is_alive():
+                    print(f"⚠️  进程终止超时，强制杀死进程ID: {train_process.pid}")
+                    train_process.kill()
+                    train_process.join(timeout=2)
+        except Exception as e:
+            print(f"❌ 终止训练进程失败: {str(e)}")
+    
+    # 清空进程字典
+    train_processes.clear()
+    print("✅ 所有训练进程已清理")
+
+
+# 注册清理函数，在程序退出时执行
+import atexit
+atexit.register(cleanup_train_processes)
 
 @train_bp.route('/<int:model_id>/train', methods=['POST'])
 def api_start_train(model_id):
@@ -93,14 +127,9 @@ def api_start_train(model_id):
             'stop_requested': False
         }
 
-        # 在后台线程中启动训练，传递train_task.id
-        train_thread = threading.Thread(
-            target=train_model,
-            args=(model_id, epochs, model_arch, img_size, batch_size,
-                  use_gpu, dataset_zip_path, train_task.id)  # 添加record_id参数
-        )
-        train_thread.daemon = True
-        train_thread.start()
+        # 直接调用train_model函数，内部会使用独立进程运行训练
+        train_model(model_id, epochs, model_arch, img_size, batch_size,
+                   use_gpu, dataset_zip_path, train_task.id)
 
         return jsonify({
             'success': True,
@@ -121,21 +150,43 @@ def get_project_root():
 def api_stop_train(model_id):
     update_log(f"收到停止训练请求，项目ID: {model_id}", model_id)
 
-    # 设置停止请求标志
-    if model_id in train_status:
-        train_status[model_id]['stop_requested'] = True
-        train_status[model_id]['status'] = 'stopping'
-        train_status[model_id]['message'] = '正在停止训练...'
-        update_log("设置停止请求标志", model_id)
-
-        # 尝试停止训练进程（如果可能）
-        if model_id in train_processes:
-            pass
-
-        return jsonify({'success': True, 'code': 0, 'msg': '停止请求已发送'}), 200
-    else:
+    # 检查是否有正在进行的训练
+    if model_id not in train_status:
         update_log("没有找到训练状态", model_id)
         return jsonify({'success': False, 'code': 0, 'msg': '没有正在进行的训练'}), 200
+
+    # 设置停止请求标志
+    train_status[model_id]['stop_requested'] = True
+    train_status[model_id]['status'] = 'stopping'
+    train_status[model_id]['message'] = '正在停止训练...'
+    update_log("设置停止请求标志", model_id)
+
+    # 尝试停止训练进程
+    if model_id in train_processes:
+        try:
+            # 获取训练进程对象
+            train_process = train_processes[model_id]
+            update_log(f"尝试终止训练进程，进程ID: {train_process.pid}", model_id)
+            
+            # 终止进程
+            train_process.terminate()
+            
+            # 等待进程结束，超时10秒
+            train_process.join(timeout=10)
+            
+            # 检查进程是否仍在运行
+            if train_process.is_alive():
+                update_log(f"进程终止超时，强制终止进程ID: {train_process.pid}", model_id)
+                train_process.kill()
+                train_process.join(timeout=5)
+            
+            # 从进程字典中移除
+            del train_processes[model_id]
+            update_log(f"训练进程已终止，项目ID: {model_id}", model_id)
+        except Exception as e:
+            update_log(f"停止训练进程出错: {str(e)}", model_id)
+
+    return jsonify({'success': True, 'code': 0, 'msg': '停止请求已发送'}), 200
 
 
 @train_bp.route('/<int:model_id>/train/status')
@@ -195,12 +246,10 @@ def update_log(message, model_id=None, progress=None, train_task=None):
             print(f"数据库提交失败: {str(e)}")
 
 
-def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
-                img_size=640, batch_size=16, use_gpu=True,
-                dataset_zip_path=None, record_id=None):
-    """增强版训练函数，集成数据集下载和解压功能"""
-    update_log(f"训练函数被调用，项目ID: {model_id}", model_id)
-
+def train_model_process(model_id, epochs=20, model_arch='yolov8n.pt',
+                        img_size=640, batch_size=16, use_gpu=True,
+                        dataset_zip_path=None, record_id=None):
+    """训练函数的实际实现，运行在独立进程中"""
     try:
         from run import create_app
         application = create_app()
@@ -226,19 +275,29 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
                 train_task.status = 'error'
                 train_task.error_log = error_msg
                 db.session.commit()
-                raise Exception(error_msg)
+                return
 
             update_log_local(f"获取项目信息成功，项目名称: {model.name}")
 
             # 检查是否应该停止训练
             if train_status.get(model_id, {}).get('stop_requested'):
                 log_msg = '训练已停止'
-                train_status[model_id] = {
-                    'status': 'stopped',
-                    'message': log_msg,
-                    'progress': 0,
-                    'log': train_status[model_id].get('log', '') + log_msg + '\n'
-                }
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': log_msg + '\n',
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': train_status[model_id].get('log', '') + log_msg + '\n'
+                    }
                 update_log_local(log_msg)
                 return
 
@@ -270,10 +329,20 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
             dataset_downloaded = False
             if not os.path.exists(data_yaml_path):
                 log_msg = '数据集配置文件不存在，正在尝试从Minio下载数据集...'
-                train_status[model_id].update({
-                    'message': '正在下载数据集...',
-                    'progress': 5
-                })
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'preparing',
+                        'message': '正在下载数据集...',
+                        'progress': 5,
+                        'log': '',
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id].update({
+                        'message': '正在下载数据集...',
+                        'progress': 5
+                    })
                 update_log_local(log_msg, progress=5)
 
                 # 确保数据集目录存在
@@ -322,12 +391,22 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
             # 检查是否应该停止训练
             if train_status.get(model_id, {}).get('stop_requested'):
                 log_msg = '训练已停止'
-                train_status[model_id] = {
-                    'status': 'stopped',
-                    'message': log_msg,
-                    'progress': 0,
-                    'log': train_status[model_id].get('log', '') + log_msg + '\n'
-                }
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': log_msg + '\n',
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': train_status[model_id].get('log', '') + log_msg + '\n'
+                    }
                 update_log_local(log_msg)
                 return
 
@@ -338,13 +417,23 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
                 train_task.status = 'error'
                 train_task.error_log = error_msg
                 db.session.commit()
-                raise Exception(error_msg)
+                return
 
             # 更新状态：开始加载模型
-            train_status[model_id].update({
-                'message': '加载预训练模型...',
-                'progress': 10
-            })
+            # 确保train_status中存在model_id条目
+            if model_id not in train_status:
+                train_status[model_id] = {
+                    'status': 'preparing',
+                    'message': '加载预训练模型...',
+                    'progress': 10,
+                    'log': '',
+                    'stop_requested': False
+                }
+            else:
+                train_status[model_id].update({
+                    'message': '加载预训练模型...',
+                    'progress': 10
+                })
             update_log_local("加载预训练YOLOv8模型...", progress=10)
 
             update_log_local(f"尝试加载预训练模型: {model_arch}")
@@ -358,17 +447,27 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
                 train_task.status = 'error'
                 train_task.error_log = error_msg
                 db.session.commit()
-                raise Exception(error_msg)
+                return
 
             # 保存模型引用以便可能的停止操作
-            train_processes[model_id] = yolo_model
+            train_models[model_id] = yolo_model
 
             # 更新状态：开始训练
-            train_status[model_id].update({
-                'status': 'train',
-                'message': '正在训练模型...',
-                'progress': 15
-            })
+            # 确保train_status中存在model_id条目
+            if model_id not in train_status:
+                train_status[model_id] = {
+                    'status': 'train',
+                    'message': '正在训练模型...',
+                    'progress': 15,
+                    'log': '',
+                    'stop_requested': False
+                }
+            else:
+                train_status[model_id].update({
+                    'status': 'train',
+                    'message': '正在训练模型...',
+                    'progress': 15
+                })
             update_log_local(f"开始训练模型，共{epochs}个epochs...", progress=15)
 
             # 训练模型
@@ -400,7 +499,11 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
             train_task.checkpoint_dir = checkpoint_dir
             db.session.commit()
 
-            # 训练模型
+            # 配置matplotlib使用非GUI后端，避免训练时的字体检查问题
+            import matplotlib
+            matplotlib.use('agg')  # 使用agg后端，不依赖GUI
+
+            # 训练模型，禁用可视化绘图功能以避免中文文件名编码问题
             yolo_model.train(
                 data=data_yaml_path,
                 epochs=epochs,
@@ -410,7 +513,15 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
                 name='train_results',
                 exist_ok=True,
                 device=device,
-                save_period=5
+                save_period=5,
+                # 禁用可视化绘图，避免中文文件名编码问题
+                plots=False,
+                # 禁用图像日志，避免中文文件名问题
+                visualize=False,
+                # 禁用混淆矩阵绘制
+                conf=0.001,
+                # 禁用验证图像保存
+                val=False
             )
 
             # 存储results.csv文件（上传Minio），然后路径存到数据库metrics_path
@@ -458,21 +569,41 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
             # 检查是否应该停止训练
             if train_status.get(model_id, {}).get('stop_requested'):
                 log_msg = '训练已停止'
-                train_status[model_id] = {
-                    'status': 'stopped',
-                    'message': log_msg,
-                    'progress': 0,
-                    'log': train_status[model_id].get('log', '') + log_msg + '\n'
-                }
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': log_msg + '\n',
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id] = {
+                        'status': 'stopped',
+                        'message': log_msg,
+                        'progress': 0,
+                        'log': train_status[model_id].get('log', '') + log_msg + '\n'
+                    }
                 update_log_local(log_msg)
                 return
 
             # 更新训练状态 - 训练完成
-            train_status[model_id].update({
-                'status': 'completed',
-                'message': '训练完成，正在保存结果...',
-                'progress': 90
-            })
+            # 确保train_status中存在model_id条目
+            if model_id not in train_status:
+                train_status[model_id] = {
+                    'status': 'completed',
+                    'message': '训练完成，正在保存结果...',
+                    'progress': 90,
+                    'log': '',
+                    'stop_requested': False
+                }
+            else:
+                train_status[model_id].update({
+                    'status': 'completed',
+                    'message': '训练完成，正在保存结果...',
+                    'progress': 90
+                })
             update_log_local("训练完成，正在保存结果...", progress=90)
 
             update_log_local("模型训练完成!")
@@ -552,14 +683,24 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
                 train_task.status = 'error'
                 train_task.error_log = error_msg
                 db.session.commit()
-                raise Exception(error_msg)
+                return
 
             # 更新训练状态 - 完成
-            train_status[model_id].update({
-                'status': 'completed',
-                'message': '模型训练完成并已保存',
-                'progress': 100
-            })
+            # 确保train_status中存在model_id条目
+            if model_id not in train_status:
+                train_status[model_id] = {
+                    'status': 'completed',
+                    'message': '模型训练完成并已保存',
+                    'progress': 100,
+                    'log': '',
+                    'stop_requested': False
+                }
+            else:
+                train_status[model_id].update({
+                    'status': 'completed',
+                    'message': '模型训练完成并已保存',
+                    'progress': 100
+                })
 
             # 更新训练记录状态
             train_task.status = 'completed'
@@ -572,45 +713,112 @@ def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
         from run import create_app
         application = create_app()
         with application.app_context():
-            if train_task:
-                train_task.status = 'error'
-                train_task.end_time = datetime.utcnow()
-                train_task.error_log = f"{str(e)}\n{traceback.format_exc()}"
+            # 重新获取train_task对象，确保在当前会话中
+            current_train_task = None
+            if record_id:
+                current_train_task = TrainTask.query.get(record_id)
+            
+            if current_train_task:
+                current_train_task.status = 'error'
+                current_train_task.end_time = datetime.utcnow()
+                current_train_task.error_log = f"{str(e)}\n{traceback.format_exc()}"
+                current_train_task.progress = 0
                 db.session.commit()
 
             error_msg = f'训练出错: {str(e)}'
             update_log(error_msg, model_id)
-            if train_task:
-                train_task.status = 'error'
-                train_task.error_log = error_msg
-                db.session.commit()
             traceback.print_exc()
 
             try:
                 log_msg = f'训练出错: {str(e)}'
-                train_status[model_id].update({
-                    'status': 'error',
-                    'message': log_msg,
-                    'progress': 0,
-                    'error_details': str(e),
-                    'traceback': traceback.format_exc(),
-                    'log': train_status[model_id].get('log', '') + log_msg + '\n' + traceback.format_exc()
-                })
-                update_log_local(log_msg)
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'error',
+                        'message': log_msg,
+                        'progress': 0,
+                        'error_details': str(e),
+                        'traceback': traceback.format_exc(),
+                        'log': log_msg + '\n' + traceback.format_exc(),
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id].update({
+                        'status': 'error',
+                        'message': log_msg,
+                        'progress': 0,
+                        'error_details': str(e),
+                        'traceback': traceback.format_exc(),
+                        'log': train_status[model_id].get('log', '') + log_msg + '\n' + traceback.format_exc()
+                    })
+                # 直接调用全局update_log，避免使用局部函数
+                update_log(log_msg, model_id)
             except Exception as inner_e:
                 update_log(f'在异常处理中获取应用上下文失败: {str(inner_e)}', model_id)
-                train_status[model_id].update({
-                    'status': 'error',
-                    'message': f'严重错误: {str(e)}',
-                    'progress': 0,
-                    'error_details': str(e),
-                    'traceback': traceback.format_exc(),
-                    'log': train_status[model_id].get('log', '') + f'严重错误: {str(e)}\n' + traceback.format_exc()
-                })
-                update_log_local(f'严重错误: {str(e)}')
+                # 确保train_status中存在model_id条目
+                if model_id not in train_status:
+                    train_status[model_id] = {
+                        'status': 'error',
+                        'message': f'严重错误: {str(e)}',
+                        'progress': 0,
+                        'error_details': str(e),
+                        'traceback': traceback.format_exc(),
+                        'log': f'严重错误: {str(e)}\n' + traceback.format_exc(),
+                        'stop_requested': False
+                    }
+                else:
+                    train_status[model_id].update({
+                        'status': 'error',
+                        'message': f'严重错误: {str(e)}',
+                        'progress': 0,
+                        'error_details': str(e),
+                        'traceback': traceback.format_exc(),
+                        'log': train_status[model_id].get('log', '') + f'严重错误: {str(e)}\n' + traceback.format_exc()
+                    })
+                # 直接调用全局update_log，避免使用局部函数
+                update_log(f'严重错误: {str(e)}', model_id)
     finally:
-        if model_id in train_processes:
-            del train_processes[model_id]
+        if model_id in train_models:
+            del train_models[model_id]
+
+
+def train_model(model_id, epochs=20, model_arch='yolov8n.pt',
+                img_size=640, batch_size=16, use_gpu=True,
+                dataset_zip_path=None, record_id=None):
+    """增强版训练函数，使用独立进程运行训练，避免阻塞Flask服务线程"""
+    update_log(f"训练函数被调用，项目ID: {model_id}", model_id)
+    
+    # 使用multiprocessing创建独立进程来运行训练
+    import multiprocessing
+    import time
+    
+    try:
+        # 创建训练进程
+        train_process = multiprocessing.Process(
+            target=train_model_process,
+            args=(model_id, epochs, model_arch, img_size, batch_size, 
+                  use_gpu, dataset_zip_path, record_id),
+            daemon=True  # 设置为守护进程，主进程结束时自动结束
+        )
+        
+        # 启动训练进程
+        train_process.start()
+        
+        # 记录进程ID，便于后续管理
+        train_processes[model_id] = train_process
+        
+        update_log(f"训练进程已启动，进程ID: {train_process.pid}，项目ID: {model_id}", model_id)
+    except RuntimeError as e:
+        update_log(f"创建训练进程失败: {str(e)}", model_id)
+        # 尝试使用另一种方式创建进程
+        try:
+            # 直接调用训练函数，不使用multiprocessing
+            # 这会阻塞当前线程，但总比崩溃好
+            update_log("尝试直接调用训练函数（不使用multiprocessing）", model_id)
+            train_model_process(model_id, epochs, model_arch, img_size, batch_size, 
+                              use_gpu, dataset_zip_path, record_id)
+        except Exception as inner_e:
+            update_log(f"直接调用训练函数也失败了: {str(inner_e)}", model_id)
 
 
 def check_gpu_status():

@@ -12,7 +12,6 @@ import sys
 import threading
 import time
 
-import netifaces
 import pytz
 from dotenv import load_dotenv
 from flask import Flask
@@ -113,25 +112,15 @@ def get_local_ip():
     if ip := os.getenv('POD_IP'):
         return ip
 
-    # 方案2: 多网卡探测
-    for iface in netifaces.interfaces():
-        addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
-        for addr in addrs:
-            ip = addr['addr']
-            if ip != '127.0.0.1' and not ip.startswith('169.254.'):
-                return ip
-
-    # 方案3: 原始方式（仅在无代理时启用）
-    if not (os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # 方案2: 使用socket方式获取本地IP（不依赖netifaces）
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            # 连接到公共DNS服务器，不发送数据，仅用于获取本地IP
             s.connect(('8.8.8.8', 80))
             ip = s.getsockname()[0]
-        finally:
-            s.close()
         return ip
-
-    raise RuntimeError("无法确定本地IP，请配置POD_IP环境变量")
+    except Exception as e:
+        raise RuntimeError(f"无法确定本地IP，请配置POD_IP环境变量: {str(e)}")
 
 
 def send_heartbeat(client, ip, port, stop_event):
@@ -307,23 +296,31 @@ def create_app():
 
     # 注册蓝图（延迟导入，避免在环境变量加载前就导入）
     try:
-        from app.blueprints import export, inference, model, train, train_task, llm, ocr, speech, deploy, auto_label
+        # 先导入核心模块，不包括OCR和cluster
+        from app.blueprints import export, inference, model, train, train_task, llm, speech, deploy, auto_label
         
+        # 注册核心蓝图
         app.register_blueprint(export.export_bp, url_prefix='/model/export')
         app.register_blueprint(inference.inference_task_bp, url_prefix='/model/inference_task')
         app.register_blueprint(model.model_bp, url_prefix='/model')
         app.register_blueprint(train.train_bp, url_prefix='/model/train')
         app.register_blueprint(train_task.train_task_bp, url_prefix='/model/train_task')
         app.register_blueprint(llm.llm_bp, url_prefix='/model/llm')
-        app.register_blueprint(ocr.ocr_bp, url_prefix='/model/ocr')
         app.register_blueprint(speech.speech_bp, url_prefix='/model/speech')
         app.register_blueprint(deploy.deploy_service_bp, url_prefix='/model/deploy_service')
         app.register_blueprint(auto_label.auto_label_bp, url_prefix='/dataset')
         
-        # 注册集群推理接口（使用不同的路由，不影响原有推理接口）
+        # 正常导入OCR模块
+        from app.blueprints import ocr
+        app.register_blueprint(ocr.ocr_bp, url_prefix='/model/ocr')
+        print("✅ OCR蓝图注册成功")
+        
+        # 正常注册集群推理接口
         from app.blueprints import cluster
         app.register_blueprint(cluster.cluster_inference_bp, url_prefix='/model/cluster')
-        print(f"✅ 所有蓝图注册成功")
+        print("✅ 集群推理蓝图注册成功")
+        
+        print(f"✅ 蓝图注册成功，核心功能已启用")
         
         # 启动心跳超时检查任务
         try:
@@ -335,7 +332,8 @@ def create_app():
         print(f"❌ 蓝图注册失败: {str(e)}")
         import traceback
         traceback.print_exc()
-        raise
+        # 不抛出异常，允许服务继续运行，即使某些蓝图注册失败
+        pass
 
     # 健康检查路由初始化
     def init_health_check(app):
@@ -485,8 +483,11 @@ if __name__ == '__main__':
     host = os.getenv('FLASK_RUN_HOST', '0.0.0.0')
     port = int(os.getenv('FLASK_RUN_PORT', 5000))
     
-    # 检查端口是否可用
-    if not check_port_available(host, port):
+    # 设置Debug模式
+    debug_mode = True
+    
+    # 在Debug模式下跳过端口检查，因为Flask会启动两个进程
+    if not debug_mode and not check_port_available(host, port):
         print(f"❌ 错误: 端口 {port} 已被占用")
         print(f"💡 解决方案:")
         print(f"   1. 检查是否有其他进程在使用端口 {port}: lsof -i :{port} 或 netstat -tulpn | grep {port}")
@@ -499,7 +500,7 @@ if __name__ == '__main__':
     print(f"🚀 服务启动: http://{ip}:{port}")
     
     try:
-        app.run(host=host, port=port)
+        app.run(host=host, port=port, debug=debug_mode)
     except OSError as e:
         if "Address already in use" in str(e):
             print(f"❌ 错误: 端口 {port} 已被占用")
