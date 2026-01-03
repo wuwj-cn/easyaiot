@@ -5,7 +5,10 @@
       class="rounded-xl overflow-hidden border border-gray-100 shadow-sm"
     >
       <template #toolbar>
-        <a-button type="primary" @click="openAddModal(true,{isEdit: false, isView: false})">
+        <div style="margin-right: 10px; display: inline-block;">
+          轮询开关：<Switch v-model:checked="isPollingActive" checked-children="开启" un-checked-children="关闭" />
+        </div>
+        <a-button type="primary" @click="openAddModal(true,{isEdit: false, isView: false})">&nbsp;
           <Icon icon="ant-design:plus-circle-outlined"/>
           启动新训练
         </a-button>
@@ -92,7 +95,7 @@ import {
 import StartTrainModal from '@/views/train/components/StartTrainTaskModal/index.vue';
 import TrainLogsModal from '@/views/train/components/TrainTaskLogsModal/index.vue';
 import {getBasicColumns, getFormConfig} from './Data';
-import {Empty as AEmpty, Modal as AModal} from 'ant-design-vue';
+import {Empty as AEmpty, Modal as AModal, Switch} from 'ant-design-vue';
 import {Icon} from "@/components/Icon"; // 引入新组件
 
 const {createMessage} = useMessage();
@@ -183,14 +186,24 @@ const pollingTimer = ref<NodeJS.Timeout | null>(null);
 const isPollingActive = ref<boolean>(true); // 轮询开关
 
 const startPolling = async () => {
-  if (!isPollingActive.value) return;
+  if (!isPollingActive.value) {
+    // 如果轮询已关闭，清除定时器
+    if (pollingTimer.value) {
+      clearTimeout(pollingTimer.value);
+      pollingTimer.value = null;
+    }
+    return;
+  }
 
   try {
     await reload(); // 调用表格刷新方法
   } catch (error) {
     console.error('轮询请求失败:', error);
   } finally {
-    pollingTimer.value = setTimeout(startPolling, pollingInterval.value);
+    // 只有在轮询仍然激活时才设置新的定时器
+    if (isPollingActive.value) {
+      pollingTimer.value = setTimeout(startPolling, pollingInterval.value);
+    }
   }
 };
 
@@ -216,6 +229,20 @@ const modelId = ref<string>(route.params.modelId?.toString() || '');
 watch(() => route.params.modelId, (newId) => {
   modelId.value = newId?.toString() || '';
   reload();
+});
+
+// 监听轮询开关变化
+watch(isPollingActive, (newVal) => {
+  if (newVal) {
+    // 如果开关打开，启动轮询
+    startPolling();
+  } else {
+    // 如果开关关闭，清除轮询定时器
+    if (pollingTimer.value) {
+      clearTimeout(pollingTimer.value);
+      pollingTimer.value = null;
+    }
+  }
 });
 
 const [registerTable, {reload}] = useTable({
