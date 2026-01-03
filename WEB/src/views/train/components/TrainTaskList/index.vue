@@ -84,7 +84,7 @@ import {useRoute, useRouter} from 'vue-router';
 import {useMessage} from '@/hooks/web/useMessage';
 import {useModal} from '@/components/Modal';
 import {
-  deleteInferenceTask,
+  deleteTrainTask,
   getTrainTaskPage,
   publishTrainTask,
   startTrain
@@ -158,7 +158,7 @@ const handlePublish = async (record) => {
 // 删除模型训练
 const handleDelete = async (record) => {
   try {
-    await deleteInferenceTask(record.id);
+    await deleteTrainTask(record.id);
     createMessage.success('删除成功');
     reload();
   } catch (error) {
