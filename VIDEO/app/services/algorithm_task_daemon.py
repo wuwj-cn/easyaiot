@@ -123,16 +123,19 @@ class AlgorithmTaskDaemon:
                     self._log(f'任务ID: {env.get("TASK_ID", "N/A")}', 'INFO')
                     
                     # 使用进程组启动，以便能够一次性终止整个进程树
-                    self._process = sp.Popen(
-                        cmds,
-                        stdout=sp.PIPE,
-                        stderr=sp.STDOUT,
-                        cwd=cwd,
-                        env=env,
-                        text=True,
-                        bufsize=1,
-                        preexec_fn=os.setsid  # 创建新的进程组
-                    )
+                    # 注意：os.setsid仅在Unix/Linux系统可用，Windows系统不支持
+                    import platform
+                    popen_kwargs = {
+                        'stdout': sp.PIPE,
+                        'stderr': sp.STDOUT,
+                        'cwd': cwd,
+                        'env': env,
+                        'text': True,
+                        'bufsize': 1
+                    }
+                    if platform.system() != 'Windows':
+                        popen_kwargs['preexec_fn'] = os.setsid  # 创建新的进程组
+                    self._process = sp.Popen(cmds, **popen_kwargs)
                     
                     self._log(f'进程已启动，PID: {self._process.pid}', 'INFO')
                     f_log.write(f'# 进程PID: {self._process.pid}\n')
@@ -196,41 +199,15 @@ class AlgorithmTaskDaemon:
                     self._log(f'进程已退出，返回码: {return_code}', 'INFO' if return_code == 0 else 'WARNING')
                     f_log.write(f'\n# 进程退出，返回码: {return_code}\n')
                     
-                    # 如果进程异常退出，记录所有输出用于诊断，并输出到控制台
-                    if return_code != 0:
-                        error_summary = []
-                        error_summary.append(f'\n# ========== 进程异常退出，完整输出 ==========')
-                        f_log.write(f'\n# ========== 进程异常退出，完整输出 ==========\n')
-                        
-                        # 提取关键错误信息
-                        key_errors = []
-                        for line in all_output_lines:
-                            f_log.write(line)
-                            # 查找关键错误信息
-                            if any(marker in line for marker in ['ERROR', 'Error', 'error', '❌', 'Exception', 'Traceback', 'Failed', 'failed', '无法', '失败']):
-                                key_errors.append(line.rstrip())
-                        
-                        f_log.write(f'# ===========================================\n')
-                        error_summary.append(f'# ===========================================')
-                        
-                        # 输出关键错误到控制台
-                        if key_errors:
-                            print(f"\n{'='*60}", file=sys.stderr)
-                            print(f"[守护进程] 任务 {self._task_id} 异常退出，返回码: {return_code}", file=sys.stderr)
-                            print(f"[守护进程] 关键错误信息:", file=sys.stderr)
-                            print(f"{'='*60}", file=sys.stderr)
-                            for error_line in key_errors[-20:]:  # 只输出最后20行错误
-                                print(f"[守护进程] {error_line}", file=sys.stderr)
-                            print(f"{'='*60}", file=sys.stderr)
-                        else:
-                            # 如果没有找到明显的错误标记，输出最后几行
-                            print(f"\n{'='*60}", file=sys.stderr)
-                            print(f"[守护进程] 任务 {self._task_id} 异常退出，返回码: {return_code}", file=sys.stderr)
-                            print(f"[守护进程] 最后输出（可能包含错误信息）:", file=sys.stderr)
-                            print(f"{'='*60}", file=sys.stderr)
-                            for line in all_output_lines[-10:]:  # 输出最后10行
-                                print(f"[守护进程] {line.rstrip()}", file=sys.stderr)
-                            print(f"{'='*60}", file=sys.stderr)
+                    # 无论返回码是什么，都继续运行守护进程
+                    # 这样即使算法任务服务异常退出，守护进程也能继续尝试重启
+                    self._log(f'守护进程将继续运行，准备重启服务', 'INFO')
+                    f_log.write(f'# [{datetime.now().isoformat()}] [INFO] 守护进程将继续运行，准备重启服务\n')
+                    f_log.flush()
+                    
+                    # 短暂休息后继续循环，避免频繁重启
+                    time.sleep(5)
+                    continue
                     
                     f_log.flush()
                     
@@ -319,13 +296,18 @@ class AlgorithmTaskDaemon:
             try:
                 # 先尝试优雅终止整个进程组
                 try:
-                    # 使用进程组ID终止整个进程树（包括所有子进程和孙进程，如FFmpeg）
-                    pgid = os.getpgid(self._process.pid)
-                    self._log(f'终止进程组 {pgid} (主进程PID: {self._process.pid})', 'INFO')
-                    os.killpg(pgid, signal.SIGTERM)
-                except (ProcessLookupError, OSError) as e:
-                    # 如果进程组不存在，尝试直接终止主进程
-                    self._log(f'进程组不存在，直接终止主进程: {str(e)}', 'WARNING')
+                    import platform
+                    if platform.system() != 'Windows':
+                        # 使用进程组ID终止整个进程树（包括所有子进程和孙进程，如FFmpeg）
+                        pgid = os.getpgid(self._process.pid)
+                        self._log(f'终止进程组 {pgid} (主进程PID: {self._process.pid})', 'INFO')
+                        os.killpg(pgid, signal.SIGTERM)
+                    else:
+                        # Windows系统：直接终止主进程
+                        self._process.terminate()
+                except (ProcessLookupError, OSError, AttributeError) as e:
+                    # 如果进程组不存在或遇到其他错误，尝试直接终止主进程
+                    self._log(f'终止进程组失败，直接终止主进程: {str(e)}', 'WARNING')
                     try:
                         self._process.terminate()
                     except ProcessLookupError:

@@ -123,7 +123,13 @@ class FFmpegDaemon:
 def auto_start_streaming():
     """应用启动时自动启动需要推流的设备[1](@ref)"""
     try:
-        devices = Device.query.filter_by(enable_forward=True).all()
+        devices = []
+        try:
+            devices = Device.query.filter_by(enable_forward=True).all()
+        except Exception as db_error:
+            logger.error(f"查询需要推流的设备失败: {str(db_error)}")
+            return
+            
         for device in devices:
             # 如果摄像头地址是 rtmp，则不启动推送
             if device.source and device.source.strip().lower().startswith('rtmp://'):

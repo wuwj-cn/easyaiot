@@ -11,7 +11,11 @@ import threading
 import time
 import logging
 
-import netifaces
+# 尝试导入netifaces，如果失败则设置为None
+try:
+    import netifaces
+except ImportError:
+    netifaces = None
 import pytz
 from dotenv import load_dotenv
 from flask import Flask
@@ -74,13 +78,17 @@ def get_local_ip():
     if ip := os.getenv('POD_IP'):
         return ip
 
-    # 方案2: 多网卡探测
-    for iface in netifaces.interfaces():
-        addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
-        for addr in addrs:
-            ip = addr['addr']
-            if ip != '127.0.0.1' and not ip.startswith('169.254.'):
-                return ip
+    # 方案2: 多网卡探测（仅当netifaces可用时）
+    if netifaces is not None:
+        try:
+            for iface in netifaces.interfaces():
+                addrs = netifaces.ifaddresses(iface).get(netifaces.AF_INET, [])
+                for addr in addrs:
+                    ip = addr['addr']
+                    if ip != '127.0.0.1' and not ip.startswith('169.254.'):
+                        return ip
+        except Exception as e:
+            logger.warning(f"多网卡探测失败: {str(e)}")
 
     # 方案3: 原始方式（仅在无代理时启用）
     if not (os.getenv('HTTP_PROXY') or os.getenv('HTTPS_PROXY')):
@@ -173,7 +181,6 @@ def create_app():
     with app.app_context():
         try:
             from models import Device, Image, DeviceDirectory, SnapSpace, SnapTask, DetectionRegion, AlgorithmModelService, RegionModelService, DeviceStorageConfig, Playback, RecordSpace, AlgorithmTask, FrameExtractor, Sorter, Pusher, DeviceDetectionRegion
-            db.create_all()
             
             # 迁移：检查并添加缺失的列和表
             try:
@@ -415,7 +422,7 @@ def create_app():
                 traceback.print_exc()
                 db.session.rollback()
         except Exception as e:
-            print(f"❌ 建表失败: {str(e)}")
+            print(f"⚠️  建表失败，服务将继续运行，但数据库相关功能可能受限: {str(e)}")
 
     # 注册蓝图
     try:

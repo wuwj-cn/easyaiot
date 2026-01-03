@@ -111,12 +111,20 @@ def _create_onvif_camera(camera_id, *args, **kwargs) -> OnvifCamera:
 
 def _get_camera(id: str) -> Device:
     """获取单个设备ORM对象"""
-    return Device.query.get(id)
+    try:
+        return Device.query.get(id)
+    except Exception as e:
+        logger.error(f"获取设备 {id} 失败: {str(e)}")
+        return None
 
 
 def _get_cameras() -> list[Device]:
     """获取所有设备"""
-    return Device.query.all()
+    try:
+        return Device.query.all()
+    except Exception as e:
+        logger.error(f"获取所有设备失败: {str(e)}")
+        return []
 
 
 def _is_custom_camera(camera: Device) -> bool:
@@ -404,7 +412,7 @@ def _safe_create_camera(camera: Device):
         # 参数验证错误，记录为调试信息
         logger.debug(f'初始化设备 {camera.id} 连接失败: {str(e)}')
     except Exception as e:
-        logger.error(f'初始化设备 {camera.id} 连接失败: {str(e)}')
+        logger.warning(f'初始化设备 {camera.id} 连接失败: {str(e)}')
 
 
 def _get_stream(rtsp_url: str, stream: int) -> str:
