@@ -310,15 +310,23 @@ def create_app():
         app.register_blueprint(deploy.deploy_service_bp, url_prefix='/model/deploy_service')
         app.register_blueprint(auto_label.auto_label_bp, url_prefix='/dataset')
         
-        # 正常导入OCR模块
-        from app.blueprints import ocr
-        app.register_blueprint(ocr.ocr_bp, url_prefix='/model/ocr')
-        print("✅ OCR蓝图注册成功")
+        # 尝试导入OCR模块，如果失败则跳过
+        try:
+            from app.blueprints import ocr
+            app.register_blueprint(ocr.ocr_bp, url_prefix='/model/ocr')
+            print("✅ OCR蓝图注册成功")
+        except Exception as e:
+            print(f"⚠️  OCR蓝图注册失败: {str(e)}")
+            print("💡 OCR功能将不可用，但不影响其他功能")
         
-        # 正常注册集群推理接口
-        from app.blueprints import cluster
-        app.register_blueprint(cluster.cluster_inference_bp, url_prefix='/model/cluster')
-        print("✅ 集群推理蓝图注册成功")
+        # 尝试注册集群推理接口，如果失败则跳过
+        try:
+            from app.blueprints import cluster
+            app.register_blueprint(cluster.cluster_inference_bp, url_prefix='/model/cluster')
+            print("✅ 集群推理蓝图注册成功")
+        except Exception as e:
+            print(f"⚠️  集群推理蓝图注册失败: {str(e)}")
+            print("💡 集群推理功能将不可用，但不影响其他功能")
         
         print(f"✅ 蓝图注册成功，核心功能已启用")
         
