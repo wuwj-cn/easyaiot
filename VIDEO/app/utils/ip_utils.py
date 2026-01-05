@@ -75,8 +75,16 @@ class IpReachabilityMonitor:
 
 def check_ip_reachable(ip: str) -> bool:
     try:
-        result = subprocess.run(['ping', '-c', '1', '-W', '1', ip],
-                                capture_output=True, text=True, timeout=2)
+        # 跨平台兼容的ping命令
+        import platform
+        if platform.system() == 'Windows':
+            # Windows系统使用-n和-w参数
+            result = subprocess.run(['ping', '-n', '1', '-w', '1000', ip],
+                                    capture_output=True, text=True, timeout=2)
+        else:
+            # Unix/Linux/macOS系统使用-c和-W参数
+            result = subprocess.run(['ping', '-c', '1', '-W', '1', ip],
+                                    capture_output=True, text=True, timeout=2)
         return result.returncode == 0
     except (subprocess.TimeoutExpired, Exception):
         return False
