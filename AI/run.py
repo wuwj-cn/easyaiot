@@ -185,16 +185,25 @@ def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
     
-    # 从环境变量获取数据库URL
+    # 从环境变量获取数据库URL，优先使用Docker Compose传入的环境变量
     database_url = os.environ.get('DATABASE_URL')
     
     if not database_url:
-        raise ValueError("DATABASE_URL环境变量未设置，请检查docker-compose.yaml配置或.env文件")
+        raise ValueError("DATABASE_URL环境变量未设置，请检查docker-compose.yaml配置")
     
     # 转换postgres://为postgresql://（SQLAlchemy要求）
     database_url = database_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,  # 连接前检测连接是否有效
+        'pool_recycle': 3600,   # 1小时后回收连接
+        'pool_size': 10,        # 连接池大小
+        'max_overflow': 20,     # 最大溢出连接数
+        'connect_args': {
+            'connect_timeout': 5,  # 连接超时时间（秒）
+        }
+    }
     app.config['TIMEZONE'] = 'Asia/Shanghai'
     
     # 配置 Flask URL 生成（用于在异步任务中使用 url_for）
