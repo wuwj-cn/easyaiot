@@ -463,8 +463,8 @@ def delete_device(device_id):
     """删除设备"""
     try:
         # 先停止可能的流媒体转发
-        if device_id in ffmpeg_processes and ffmpeg_processes[device_id]['process'] is not None:
-            process = ffmpeg_processes[device_id]['process']
+        if device_id in ffmpeg_processes and ffmpeg_processes[device_id].process is not None:
+            process = ffmpeg_processes[device_id].process
             if process.poll() is None:  # 进程仍在运行
                 stop_ffmpeg_stream(device_id)
 
