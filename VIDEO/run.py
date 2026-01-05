@@ -776,9 +776,14 @@ def create_app():
                             # 数据库连接异常，尝试回滚并记录错误
                             logger.warning(f"数据库连接异常，尝试重新连接: {str(db_error)}")
                             try:
+                                # 关闭当前会话
                                 db.session.rollback()
-                                # 尝试重新连接
+                                db.session.close()
+                                
+                                # 尝试重新创建会话并连接
+                                db.session = db.create_scoped_session()
                                 db.session.execute(text("SELECT 1"))
+                                logger.info("数据库重连成功")
                             except Exception as reconnect_error:
                                 logger.error(f"数据库重连失败: {str(reconnect_error)}")
                                 # 不抛出异常，让定时任务继续运行
