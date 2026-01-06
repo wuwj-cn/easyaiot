@@ -122,15 +122,15 @@ alert_time_lock = threading.Lock()  # 告警时间戳锁，确保线程安全
 
 # 配置参数（从数据库读取，支持环境变量覆盖以降低CPU占用）
 # 帧率：降低可减少CPU占用和推流速度
-SOURCE_FPS = int(os.getenv('SOURCE_FPS', '20'))  # 默认20fps（提高流畅度）
+SOURCE_FPS = int(os.getenv('SOURCE_FPS', '15'))  # 默认15fps（原25fps）
 # 分辨率：降低可大幅减少CPU占用和推流速度
 TARGET_WIDTH = int(os.getenv('TARGET_WIDTH', '640'))  # 默认640（原1280）
 TARGET_HEIGHT = int(os.getenv('TARGET_HEIGHT', '360'))  # 默认360（原720）
 TARGET_RESOLUTION = (TARGET_WIDTH, TARGET_HEIGHT)
-EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '2'))
-BUFFER_SIZE = int(os.getenv('BUFFER_SIZE', '30'))
-MIN_BUFFER_FRAMES = int(os.getenv('MIN_BUFFER_FRAMES', '5'))
-MAX_WAIT_TIME = float(os.getenv('MAX_WAIT_TIME', '0.05'))
+EXTRACT_INTERVAL = int(os.getenv('EXTRACT_INTERVAL', '5'))
+BUFFER_SIZE = int(os.getenv('BUFFER_SIZE', '70'))
+MIN_BUFFER_FRAMES = int(os.getenv('MIN_BUFFER_FRAMES', '15'))
+MAX_WAIT_TIME = float(os.getenv('MAX_WAIT_TIME', '0.08'))
 # FFmpeg编码参数（优化以降低CPU占用）
 # FFmpeg编码参数（优化以降低CPU占用）
 # 处理空字符串的情况，确保参数有效
@@ -146,15 +146,15 @@ FFMPEG_THREADS_ENV = os.getenv('FFMPEG_THREADS', None)
 FFMPEG_THREADS = None if not FFMPEG_THREADS_ENV or FFMPEG_THREADS_ENV.strip() == '' else FFMPEG_THREADS_ENV.strip()
 # GOP大小：2秒一个关键帧（在SOURCE_FPS定义后计算）
 FFMPEG_GOP_SIZE_ENV = os.getenv('FFMPEG_GOP_SIZE', None)
-FFMPEG_GOP_SIZE = int(FFMPEG_GOP_SIZE_ENV) if FFMPEG_GOP_SIZE_ENV else (SOURCE_FPS * 1)  # 减小GOP大小，提高画面更新频率
+FFMPEG_GOP_SIZE = int(FFMPEG_GOP_SIZE_ENV) if FFMPEG_GOP_SIZE_ENV else (SOURCE_FPS * 2)
 # YOLO检测参数（优化以降低CPU占用）
-YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '320'))  # 降低检测分辨率，提高检测速度（原640）
+YOLO_IMG_SIZE = int(os.getenv('YOLO_IMG_SIZE', '416'))  # 检测分辨率：降低可减少CPU占用（原640）
 # 队列大小配置（优化以处理高负载）
-DETECTION_QUEUE_SIZE = int(os.getenv('DETECTION_QUEUE_SIZE', '50'))  # 减小检测队列大小，避免积压（默认100，原50）
-PUSH_QUEUE_SIZE = int(os.getenv('PUSH_QUEUE_SIZE', '50'))  # 减小推帧队列大小，避免积压（默认100，原50）
-EXTRACT_QUEUE_SIZE = int(os.getenv('EXTRACT_QUEUE_SIZE', '30'))  # 减小抽帧队列大小，避免积压（默认50）
+DETECTION_QUEUE_SIZE = int(os.getenv('DETECTION_QUEUE_SIZE', '100'))  # 检测队列大小（默认100，原50）
+PUSH_QUEUE_SIZE = int(os.getenv('PUSH_QUEUE_SIZE', '100'))  # 推帧队列大小（默认100，原50）
+EXTRACT_QUEUE_SIZE = int(os.getenv('EXTRACT_QUEUE_SIZE', '50'))  # 抽帧队列大小（默认50）
 # 检测工作线程数量（优化以提升处理能力）
-YOLO_WORKER_THREADS = int(os.getenv('YOLO_WORKER_THREADS', '4'))  # 增加YOLO检测线程数，提高并发处理能力（默认2，原1）
+YOLO_WORKER_THREADS = int(os.getenv('YOLO_WORKER_THREADS', '2'))  # YOLO检测线程数（默认2，原1）
 
 
 def download_model_file(model_id: int, model_path: str) -> Optional[str]:
@@ -1536,7 +1536,7 @@ def buffer_streamer_worker(device_id: str):
                     pending_frames.add(frame_count)
                     frame_sent = False
                     retry_count = 0
-                    max_retries = 3  # 减少重试次数，避免阻塞主循环
+                    max_retries = 5
                     while not frame_sent and retry_count < max_retries:
                         try:
                             extract_queues[device_id].put_nowait({
@@ -1549,15 +1549,13 @@ def buffer_streamer_worker(device_id: str):
                         except queue.Full:
                             retry_count += 1
                             if retry_count < max_retries:
-                                time.sleep(0.005)  # 减少等待时间
+                                time.sleep(0.01)
                             else:
-                                # 队列已满，不再等待，直接跳过该帧，避免阻塞
-                                pending_frames.discard(frame_count)
-                                logger.warning(f"⚠️  设备 {device_id} 抽帧队列已满，帧 {frame_count} 已跳过")
+                                logger.warning(f"⚠️  设备 {device_id} 抽帧队列已满，帧 {frame_count} 等待处理中...")
             
             # 检查推帧队列，将处理后的帧插入缓冲区
             processed_count = 0
-            max_process_per_cycle = 30  # 增加每次处理的帧数，加快处理速度
+            max_process_per_cycle = 20  # 增加每次处理的帧数，加快处理速度
             while processed_count < max_process_per_cycle:
                 try:
                     push_data = push_queues[device_id].get_nowait()
@@ -1593,7 +1591,7 @@ def buffer_streamer_worker(device_id: str):
             
             # 输出帧（按顺序输出，支持追踪缓存框绘制）
             output_count = 0
-            max_output_per_cycle = 5  # 每次最多输出5帧，提高流畅度
+            max_output_per_cycle = 2  # 每次最多输出2帧
             
             while output_count < max_output_per_cycle:
                 with buffer_locks[device_id]:
