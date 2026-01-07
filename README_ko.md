@@ -36,6 +36,7 @@ EasyAIoT는 AI와 IoT의 심층적 융합에 초점을 맞춘 클라우드-엣�
 #### 🧠 AI 기능
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>다중 프로토콜 카메라 접근 지원</strong>: GB28181 및 ONVIF 두 가지 주요 비디오 감시 프로토콜을 완전히 지원하여 표준화된 장치 접근 및 관리를 실현합니다. GB28181은 중국 국가 표준으로 국내 주요 감시 장비에 완벽하게 적합하며, ONVIF는 국제 범용 표준으로 전 세계 주요 카메라 브랜드와 광범위하게 호환됩니다. 이중 프로토콜 지원을 통해 플랫폼은 기존 감시 시스템과 원활하게 통합할 수 있으며, 플러그 앤 플레이 장치 접근, 자동 발견 및 통합 관리를 실현하여 장치 접근 장벽을 크게 낮추고 시스템 호환성과 확장성을 향상시키며 대규모 카메라 배포를 위한 견고한 기술 기반을 제공합니다</li>
   <li><strong>비전 대규모 모델 지능형 이해</strong>: QwenVL3 비전 대규모 모델을 통합하여 실시간 비디오 프레임에 대한 심층 비전 추론 및 의미론적 이해를 지원하며, 프레임 내용에 대한 지능형 분석 및 장면 이해를 수행할 수 있어 더 풍부한 시각적 인지 능력을 제공하며, 픽셀 수준의 인식에서 의미론적 수준의 이해로의 도약을 실현합니다</li>
   <li><strong>카메라 실시간 영상 AI 분석</strong>: 카메라 실시간 영상의 AI 지능형 분석을 지원하며, 실시간 비디오 스트림에 대해 객체 감지, 행동 분석, 이상 식별 등의 AI 알고리즘 처리를 수행할 수 있습니다. 밀리초 단위 응답의 실시간 분석 결과를 제공하며, 다중 비디오 병렬 분석을 지원합니다.</li>
   <li><strong>클라우드-엣지-디바이스 통합 알고리즘 경보 모니터링 대시보드</strong>: 통일된 클라우드-엣지-디바이스 통합 알고리즘 경보 모니터링 대시보드를 제공하며, 디바이스 상태, 알고리즘 태스크 실행 상황, 경보 이벤트 통계, 비디오 스트림 분석 결과 등 주요 정보를 실시간으로 표시합니다. 다차원 데이터 시각화 표시를 지원하여 클라우드, 엣지, 디바이스 측의 통합 모니터링 및 관리를 실현하며, 의사결정자에게 전역적 관점의 지능형 모니터링 지휘 센터를 제공합니다.</li>
@@ -640,7 +641,7 @@ EasyAIoT 플랫폼과 코드를 깊이 이해하실 수 있도록 다양한 서�
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src=".image/sponsor/icon.jpg" width="80px;" alt="icon"/><br /><sub><b>icon</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/jiang4yu" target="_blank"><img src=".image/sponsor/山寒.jpg" width="80px;" alt="山寒"/><br /><sub><b>山寒</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/baobaomo" target="_blank"><img src="./.image/sponsor/放学丶别走.jpg" width="80px;" alt="放学丶别走"/><br /><sub><b>放学丶别走</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/wagger" target="_blank"><img src="./.image/sponsor/春和.jpg" width="80px;" alt="春和"/><br /><sub><b>春和</b></sub></a></td>
@@ -706,7 +707,7 @@ EasyAIoT 플랫폼과 코드를 깊이 이해하실 수 있도록 다양한 서�
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/nctwo" target="_blank"><img src=".image/sponsor/信微输传助手.jpg" width="80px;" alt="信微输传助手"/><br /><sub><b>信微输传助手</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/l9999_admin" target="_blank"><img src=".image/sponsor/一往无前.jpg" width="80px;" alt="一往无前"/><br /><benen>一往无前</benen></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/l9999_admin" target="_blank"><img src=".image/sponsor/一往无前.jpg" width="80px;" alt="一往无前"/><br /><sub><benen>一往无前</benen></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/stenin" target="_blank"><img src="./.image/sponsor/Charon.jpg" width="80px;" alt="Charon"/><br /><sub><b>Charon</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/zhao-yihuiwifi" target="_blank"><img src="./.image/sponsor/赵WIFI..jpg" width="80px;" alt="赵WIFI."/><br /><sub><b>赵WIFI.</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/Yang619" target="_blank"><img src="./.image/sponsor/Chao..jpg" width="80px;" alt="Chao."/><br /><sub><b>Chao.</b></sub></a></td>
@@ -794,6 +795,7 @@ EasyAIoT 플랫폼과 코드를 깊이 이해하실 수 있도록 다양한 서�
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/孙涛.jpg" width="80px;" alt="孙涛"/><br /><sub><b>孙涛</b></sub></a></td>
     </tr>
     <tr>
+        <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/hrsjw1.jpg" width="80px;" alt="hrsjw1"/><br /><sub><b>hrsjw1</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/linguanghuan.jpg" width="80px;" alt="linguanghuan"/><br /><sub><b>linguanghuan</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/YiYaYiYaho.jpg" width="80px;" alt="YiYaYiYaho"/><br /><sub><b>YiYaYiYaho</b></sub></a></td>

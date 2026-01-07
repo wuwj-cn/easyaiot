@@ -36,6 +36,7 @@ EasyAIoT是一个云边端一体化的智能物联网平台，专注于AI与IoT�
 #### 🧠 AI能力
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>多协议摄像头接入支持</strong>：全面支持GB28181和ONVIF两大主流视频监控协议，实现标准化设备接入与管理。GB28181作为中国国家标准，完美适配国内主流监控设备；ONVIF作为国际通用标准，广泛兼容全球主流品牌摄像头。通过双协议支持，平台能够无缝对接现有监控系统，实现设备的即插即用、自动发现与统一管理，大幅降低设备接入门槛，提升系统兼容性与扩展性，为大规模摄像头部署提供坚实的技术基础</li>
   <li><strong>视觉大模型智能理解</strong>：集成QwenVL3视觉大模型，支持对实时视频画面进行深度视觉推理与语义理解，能够对画面内容进行智能分析与场景理解，提供更丰富的视觉认知能力，实现从像素级感知到语义级理解的跨越</li>
   <li><strong>摄像头实时画面AI分析</strong>：支持摄像头实时画面的AI智能分析，可对实时视频流进行目标检测、行为分析、异常识别等AI算法处理，提供毫秒级响应的实时分析结果，支持多路视频并发分析</li>
   <li><strong>云边端一体算法预警监控大屏</strong>：提供统一的云边端一体化算法预警监控大屏，实时展示设备状态、算法任务运行情况、告警事件统计、视频流分析结果等关键信息，支持多维度数据可视化展示，实现云端、边缘端、设备端的统一监控与管理，为决策者提供全局视角的智能监控指挥中心</li>
@@ -641,7 +642,7 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src=".image/sponsor/icon.jpg" width="80px;" alt="icon"/><br /><sub><b>icon</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/jiang4yu" target="_blank"><img src=".image/sponsor/山寒.jpg" width="80px;" alt="山寒"/><br /><sub><b>山寒</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/baobaomo" target="_blank"><img src="./.image/sponsor/放学丶别走.jpg" width="80px;" alt="放学丶别走"/><br /><sub><b>放学丶别走</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/wagger" target="_blank"><img src="./.image/sponsor/春和.jpg" width="80px;" alt="春和"/><br /><sub><b>春和</b></sub></a></td>
@@ -795,6 +796,7 @@ EasyAIoT是一个开源学习项目，与商业行为无关。用户在使用该
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/孙涛.jpg" width="80px;" alt="孙涛"/><br /><sub><b>孙涛</b></sub></a></td>
     </tr>
     <tr>
+        <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/hrsjw1.jpg" width="80px;" alt="hrsjw1"/><br /><sub><b>hrsjw1</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/linguanghuan.jpg" width="80px;" alt="linguanghuan"/><br /><sub><b>linguanghuan</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/YiYaYiYaho.jpg" width="80px;" alt="YiYaYiYaho"/><br /><sub><b>YiYaYiYaho</b></sub></a></td>

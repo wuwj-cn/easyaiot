@@ -36,6 +36,7 @@ EasyAIoT est une plateforme intelligente d'Internet des Objets (IoT) à intégra
 #### 🧠 Capacités d'IA
 
 <ul style="font-size: 14px; line-height: 1.8; color: #444; margin: 10px 0;">
+  <li><strong>Support d'accès multi-protocole pour caméras</strong> : Support complet des deux principaux protocoles de vidéosurveillance GB28181 et ONVIF, permettant un accès et une gestion standardisés des appareils. GB28181, en tant que norme nationale chinoise, s'adapte parfaitement aux équipements de vidéosurveillance domestiques principaux ; ONVIF, en tant que norme universelle internationale, est largement compatible avec les principales marques de caméras mondiales. Grâce au support double protocole, la plateforme peut s'intégrer de manière transparente avec les systèmes de vidéosurveillance existants, réalisant un accès plug-and-play des appareils, une découverte automatique et une gestion unifiée, réduisant considérablement les barrières d'accès aux appareils, améliorant la compatibilité et l'évolutivité du système, et fournissant une base technique solide pour le déploiement à grande échelle de caméras</li>
   <li><strong>Compréhension intelligente des grands modèles visuels</strong> : Intégré avec le grand modèle visuel QwenVL3, prend en charge le raisonnement visuel profond et la compréhension sémantique des images vidéo en temps réel, capable d'effectuer une analyse intelligente et une compréhension de scène du contenu des images, fournissant des capacités cognitives visuelles plus riches, réalisant un saut de la perception au niveau des pixels à la compréhension au niveau sémantique</li>
   <li><strong>Analyse IA en temps réel des flux vidéo</strong> : Prend en charge l'analyse intelligente par IA des flux vidéo en temps réel des caméras. Permet le traitement par algorithmes d'IA (détection d'objets, analyse comportementale, identification d'anomalies, etc.) des flux vidéo en temps réel, fournissant des résultats d'analyse en temps réel avec une réponse en millisecondes. Prend en charge l'analyse simultanée de multiples flux vidéo.</li>
   <li><strong>Tableau de bord unifié de surveillance et d'alerte algorithmique cloud-bord-périphérique</strong> : Fournit un tableau de bord unifié de surveillance et d'alerte algorithmique à intégration cloud-bord-périphérique, affichant en temps réel les informations clés telles que l'état des appareils, l'exécution des tâches algorithmiques, les statistiques d'événements d'alerte, les résultats d'analyse des flux vidéo, etc. Prend en charge la visualisation de données multidimensionnelles, réalisant une surveillance et une gestion unifiées du cloud, du bord et des périphériques, offrant aux décideurs un centre de commande de surveillance intelligent avec une vue globale.</li>
@@ -641,7 +642,7 @@ Nous remercions les personnes suivantes pour leur soutien à ce projet, sous for
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src=".image/sponsor/icon.jpg" width="80px;" alt="icon"/><br /><sub><b>icon</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/jiang4yu" target="_blank"><img src=".image/sponsor/山寒.jpg" width="80px;" alt="山寒"/><br /><sub><b>山寒</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/baobaomo" target="_blank"><img src="./.image/sponsor/放学丶别走.jpg" width="80px;" alt="放学丶别走"/><br /><sub><b>放学丶别走</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/wagger" target="_blank"><img src="./.image/sponsor/春和.jpg" width="80px;" alt="春和"/><br /><sub><b>春和</b></sub></a></td>
@@ -707,7 +708,7 @@ Nous remercions les personnes suivantes pour leur soutien à ce projet, sous for
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/nctwo" target="_blank"><img src=".image/sponsor/信微输传助手.jpg" width="80px;" alt="信微输传助手"/><br /><sub><b>信微输传助手</b></sub></a></td>
     </tr>
     <tr>
-      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/l9999_admin" target="_blank"><img src=".image/sponsor/一往无前.jpg" width="80px;" alt="一往无前"/><br /><benen>一往无前</benen></sub></a></td>
+      <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/l9999_admin" target="_blank"><img src=".image/sponsor/一往无前.jpg" width="80px;" alt="一往无前"/><br /><sub><benen>一往无前</benen></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/stenin" target="_blank"><img src="./.image/sponsor/Charon.jpg" width="80px;" alt="Charon"/><br /><sub><b>Charon</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/zhao-yihuiwifi" target="_blank"><img src="./.image/sponsor/赵WIFI..jpg" width="80px;" alt="赵WIFI."/><br /><sub><b>赵WIFI.</b></sub></a></td>
       <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/Yang619" target="_blank"><img src="./.image/sponsor/Chao..jpg" width="80px;" alt="Chao."/><br /><sub><b>Chao.</b></sub></a></td>
@@ -795,6 +796,7 @@ Nous remercions les personnes suivantes pour leur soutien à ce projet, sous for
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/孙涛.jpg" width="80px;" alt="孙涛"/><br /><sub><b>孙涛</b></sub></a></td>
     </tr>
     <tr>
+        <td align="center" valign="top" width="11.11%"><a href="https://gitee.com/bcake" target="_blank"><img src=".image/sponsor/大饼.jpg" width="80px;" alt="大饼"/><br /><sub><b>大饼</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/hrsjw1.jpg" width="80px;" alt="hrsjw1"/><br /><sub><b>hrsjw1</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/linguanghuan.jpg" width="80px;" alt="linguanghuan"/><br /><sub><b>linguanghuan</b></sub></a></td>
         <td align="center" valign="top" width="11.11%"><a href="javascript:void(0)" target="_blank"><img src="./.image/sponsor/YiYaYiYaho.jpg" width="80px;" alt="YiYaYiYaho"/><br /><sub><b>YiYaYiYaho</b></sub></a></td>
