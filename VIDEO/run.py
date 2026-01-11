@@ -181,7 +181,8 @@ def create_app():
     with app.app_context():
         try:
             from models import Device, Image, DeviceDirectory, SnapSpace, SnapTask, DetectionRegion, AlgorithmModelService, RegionModelService, DeviceStorageConfig, Playback, RecordSpace, AlgorithmTask, FrameExtractor, Sorter, Pusher, DeviceDetectionRegion
-            
+            db.create_all()
+
             # 迁移：检查并添加缺失的列和表
             try:
                 # 确保所有表都存在（包括 device_directory）
