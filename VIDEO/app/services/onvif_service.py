@@ -159,7 +159,7 @@ class OnvifCamera:
             # 获取MAC地址
             self._mac = self._camera.devicemgmt.GetNetworkInterfaces()[0].Info.HwAddress
         except Exception as e:
-            logger.warning(f"Camera initialization failed: {str(e)}")
+            logger.critical(f"Camera initialization failed: {str(e)}")
             raise ConnectionError("Camera connection failed") from e
 
     def get_info(self) -> Dict[str, Union[str, bool]]:
