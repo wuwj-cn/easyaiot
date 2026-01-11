@@ -775,16 +775,17 @@ def check_rtmp_server_connection(rtmp_url: str) -> bool:
         
         # 尝试连接RTMP服务器端口
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(3)
+        sock.settimeout(5)  # 增加超时时间到5秒，适应远程服务器
         result = sock.connect_ex((host, port))
         sock.close()
         
         if result == 0:
             return True
         else:
+            logger.warning(f"⚠️  无法连接到RTMP服务器 {host}:{port}，错误代码: {result}")
             return False
     except Exception as e:
-        logger.debug(f"检查RTMP服务器连接时出错: {str(e)}")
+        logger.warning(f"⚠️  检查RTMP服务器连接时出错: {str(e)}")
         return False
 
 
@@ -1287,6 +1288,20 @@ def buffer_streamer_worker(device_id: str):
                         if pusher_process.poll() is None:
                             pusher_process.kill()
                 
+                # 在重新启动推流进程前，先检查RTMP服务器连接状态
+                if rtmp_url:
+                    logger.info(f"🔍 检查RTMP服务器 {rtmp_url} 连接状态...")
+                    if not check_rtmp_server_connection(rtmp_url):
+                        logger.error(f"❌ RTMP服务器 {rtmp_url} 连接失败，跳过本次推流启动")
+                        pusher_retry_count += 1
+                        if pusher_retry_count >= pusher_max_retries:
+                            logger.error(f"❌ 设备 {device_id} 多次尝试连接RTMP服务器失败，等待15秒后重置重试计数")
+                            time.sleep(15)
+                            pusher_retry_count = 0
+                        continue
+                    else:
+                        logger.info(f"✅ RTMP服务器 {rtmp_url} 连接正常")
+                
                 frame_width = width
                 frame_height = height
                 
@@ -1302,7 +1317,37 @@ def buffer_streamer_worker(device_id: str):
                         logger.info(f"🔍 检查设备 {device_id} 是否存在占用该地址的流...")
                         check_and_stop_existing_stream(rtmp_url)
                     
-                    # 构建 ffmpeg 命令（优化版本：低CPU占用、低推流速度）
+                    # 检测可用的GPU编码器
+                    def detect_gpu_encoder():
+                        """检测系统可用的GPU编码器"""
+                        import subprocess
+                        try:
+                            # 尝试检测NVIDIA GPU编码器
+                            result = subprocess.run(
+                                ["ffmpeg", "-hide_banner", "-encoders"],
+                                capture_output=True,
+                                text=True,
+                                timeout=5
+                            )
+                            if "h264_nvenc" in result.stdout:
+                                return "h264_nvenc"
+                            elif "hevc_nvenc" in result.stdout:
+                                return "hevc_nvenc"
+                            elif "h264_amf" in result.stdout:
+                                return "h264_amf"
+                            elif "h264_qsv" in result.stdout:
+                                return "h264_qsv"
+                            elif "h264_videotoolbox" in result.stdout:
+                                return "h264_videotoolbox"
+                            else:
+                                return "libx264"  #  fallback to CPU encoding
+                        except:
+                            return "libx264"
+                    
+                    # 选择编码器
+                    video_encoder = detect_gpu_encoder()
+                    
+                    # 构建 ffmpeg 命令（优化版本：支持GPU加速）
                     # 优化参数说明：
                     # -preset ultrafast: 最快编码，最低CPU占用
                     # -b:v 500k: 降低视频比特率，减少推流速度
@@ -1320,14 +1365,53 @@ def buffer_streamer_worker(device_id: str):
                         "-s", f"{width}x{height}",
                         "-r", str(SOURCE_FPS),
                         "-i", "-",
-                        "-c:v", "libx264",
+                        "-c:v", video_encoder,  # 使用GPU编码器或CPU fallback
                         "-b:v", FFMPEG_VIDEO_BITRATE,  # 使用配置的比特率（默认500k）
                         "-pix_fmt", "yuv420p",
-                        "-preset", FFMPEG_PRESET,  # 使用配置的预设（默认ultrafast）
-                        "-g", str(FFMPEG_GOP_SIZE),  # GOP 大小：2秒一个关键帧
-                        "-keyint_min", str(SOURCE_FPS),  # 最小关键帧间隔：1秒
-                        "-f", "flv",
                     ]
+                    
+                    # 针对不同的编码器设置特定参数
+                    if video_encoder in ["h264_nvenc", "hevc_nvenc"]:
+                        # NVIDIA GPU编码参数
+                        ffmpeg_cmd.extend([
+                            "-preset", "ll" if FFMPEG_PRESET == "ultrafast" else FFMPEG_PRESET,  # 使用低延迟预设
+                            "-g", str(FFMPEG_GOP_SIZE),  # GOP 大小：2秒一个关键帧
+                            "-keyint_min", str(SOURCE_FPS),  # 最小关键帧间隔：1秒
+                            "-bf", "0",  # 关闭B帧，降低延迟
+                            "-sc_threshold", "0",  # 关闭场景切换检测
+                            "-rc-lookahead", "0",  # 关闭码率控制前瞻
+                        ])
+                    elif video_encoder in ["h264_amf"]:
+                        # AMD GPU编码参数
+                        ffmpeg_cmd.extend([
+                            "-preset", "balanced",
+                            "-g", str(FFMPEG_GOP_SIZE),
+                            "-keyint_min", str(SOURCE_FPS),
+                        ])
+                    elif video_encoder in ["h264_qsv"]:
+                        # Intel GPU编码参数
+                        ffmpeg_cmd.extend([
+                            "-preset", "veryfast",
+                            "-g", str(FFMPEG_GOP_SIZE),
+                            "-keyint_min", str(SOURCE_FPS),
+                        ])
+                    else:
+                        # CPU编码参数（libx264）
+                        ffmpeg_cmd.extend([
+                            "-preset", FFMPEG_PRESET,  # 使用配置的预设（默认ultrafast）
+                            "-g", str(FFMPEG_GOP_SIZE),  # GOP 大小：2秒一个关键帧
+                            "-keyint_min", str(SOURCE_FPS),  # 最小关键帧间隔：1秒
+                        ])
+                    
+                    # 添加通用参数
+                    ffmpeg_cmd.extend([
+                        "-max_muxing_queue_size", "1024",  # 增大复用队列大小，避免队列满错误
+                        "-reconnect", "1",  # 启用自动重连
+                        "-reconnect_at_eof", "1",  # 在EOF时重连
+                        "-reconnect_streamed", "1",  # 对流媒体流进行重连
+                        "-reconnect_delay_max", "10",  # 最大重连延迟10秒
+                        "-f", "flv",
+                    ])
                     
                     # 如果配置了线程数限制，添加线程参数
                     # 确保 FFMPEG_THREADS 是有效的非空值
@@ -1345,9 +1429,12 @@ def buffer_streamer_worker(device_id: str):
                     # 添加输出地址
                     ffmpeg_cmd.append(rtmp_url)
                     
-                    logger.info(f"🚀 启动设备 {device_id} 推送进程（优化模式：低CPU占用）")
+                    # 日志输出，显示编码器类型
+                    encoder_type = "GPU" if video_encoder != "libx264" else "CPU"
+                    logger.info(f"🚀 启动设备 {device_id} 推送进程（{encoder_type}加速模式）")
                     logger.info(f"   📺 推流地址: {rtmp_url}")
                     logger.info(f"   📐 尺寸: {width}x{height}, 帧率: {SOURCE_FPS}fps")
+                    logger.info(f"   🎬 编码器: {video_encoder} ({encoder_type}编码)")
                     logger.info(f"   🎬 编码预设: {FFMPEG_PRESET}, 比特率: {FFMPEG_VIDEO_BITRATE}, GOP: {FFMPEG_GOP_SIZE}")
                     if FFMPEG_THREADS is not None and str(FFMPEG_THREADS).strip():
                         logger.info(f"   🧵 编码线程数: {FFMPEG_THREADS}")
