@@ -7,6 +7,7 @@ import datetime
 import io
 import logging
 import os
+import psutil
 import subprocess
 import threading
 import time
@@ -44,6 +45,11 @@ onvif_tasks = {}
 ffmpeg_processes = {}
 ffmpeg_lock = threading.Lock()
 
+# 设备RTSP流状态监控（True: 流可用, False: 流不可用）
+device_rtsp_status = {}
+# RTSP状态监控锁
+rtsp_status_lock = threading.Lock()
+
 
 class FFmpegDaemon:
     """FFmpeg进程守护线程（支持自动重启）"""
@@ -55,23 +61,167 @@ class FFmpegDaemon:
         self._restart_flag = False
         self.start_daemon()
 
+    def check_nvenc_support(self):
+        """检查FFmpeg是否支持NVENC编码器"""
+        try:
+            # 检查编码器可用性
+            result = subprocess.run(
+                ["ffmpeg", "-encoders"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                return False
+            
+            encoders_output = result.stdout.lower()
+            has_nvenc = "h264_nvenc" in encoders_output or "nvenc_h264" in encoders_output
+            if not has_nvenc:
+                return False
+            
+            # 测试实际编码能力
+            test_cmd = [
+                "ffmpeg",
+                "-y",
+                "-f", "lavfi",
+                "-i", "color=c=red:s=640x360:r=15",
+                "-c:v", "h264_nvenc",
+                "-b:v", "500k",
+                "-pix_fmt", "yuv420p",
+                "-preset", "p7",
+                "-g", "30",
+                "-keyint_min", "15",
+                "-t", "1",
+                "-f", "null", "-"
+            ]
+            result = subprocess.run(
+                test_cmd,
+                capture_output=True,
+                text=True
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+
+    def check_rtmp_server_connection(self, rtmp_url: str) -> bool:
+        """检查RTMP服务器是否可用"""
+        try:
+            import socket
+            # 从RTMP URL中提取主机和端口
+            if not rtmp_url.startswith('rtmp://'):
+                return False
+            
+            # 解析URL: rtmp://host:port/path -> (host, port)
+            url_part = rtmp_url.replace('rtmp://', '')
+            if '/' in url_part:
+                host_port = url_part.split('/')[0]
+            else:
+                host_port = url_part
+            
+            if ':' in host_port:
+                host, port_str = host_port.split(':', 1)
+                try:
+                    port = int(port_str)
+                except ValueError:
+                    port = 1935  # 默认RTMP端口
+            else:
+                host = host_port
+                port = 1935  # 默认RTMP端口
+            
+            # 尝试连接RTMP服务器端口
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            
+            return result == 0
+        except Exception:
+            return False
+
     def start_daemon(self):
         device = Device.query.get(self.device_id)
 
         def daemon_task():
             while self._running:
-                # 关键修复：移除路径引号
+                # 检查RTMP服务器是否可用
+                if not self.check_rtmp_server_connection(device.rtmp_stream):
+                    logger.error(f"❌ 设备 {self.device_id} RTMP服务器不可用，无法启动推送进程")
+                    logger.error(f"   推流地址: {device.rtmp_stream}")
+                    time.sleep(15)  # RTMP服务器不可用，等待15秒后重试
+                    continue
+                
+                # 检查NVENC支持
+                support_nvenc = self.check_nvenc_support()
+                
+                # 构建FFmpeg命令
                 ffmpeg_cmd = [
                     'ffmpeg',
                     '-rtsp_transport', 'tcp',
+                    # 输入低延迟参数
+                    '-fflags', 'nobuffer',
+                    '-flags', 'low_delay',
+                    '-probesize', '32',
+                    '-analyzeduration', '0',
                     '-i', device.source,  # 直接使用路径
                     '-an',  # 禁用音频
-                    '-c:v', 'libx264',
-                    '-b:v', '512k',
-                    '-f', 'flv',
-                    f'{device.rtmp_stream}'
                 ]
+                
+                # 根据NVENC支持选择编码器
+                if support_nvenc:
+                    ffmpeg_cmd.extend([
+                        '-c:v', 'h264_nvenc',
+                        '-preset', 'll',  # 低延迟预设
+                        '-b:v', '512k',
+                        # NVENC低延迟参数
+                        '-delay', '0',
+                        '-max_delay', '0',
+                        '-g', '30',  # 关键帧间隔
+                        '-bf', '0',  # 禁用B帧
+                        '-sc_threshold', '0',  # 禁用场景切换检测
+                        '-rc-lookahead', '0',  # 禁用码率控制前瞻
+                        '-profile:v', 'baseline'  # 基线profile，减少复杂度
+                    ])
+                else:
+                    ffmpeg_cmd.extend([
+                        '-c:v', 'libx264',
+                        '-b:v', '512k',
+                        # libx264低延迟参数
+                        '-preset', 'ultrafast',  # 最快编码速度
+                        '-tune', 'zerolatency',  # 零延迟优化
+                        '-g', '30',  # 关键帧间隔
+                        '-bf', '0',  # 禁用B帧
+                        '-sc_threshold', '0',  # 禁用场景切换检测
+                        '-profile:v', 'baseline',  # 基线profile
+                        '-refs', '1'  # 减少参考帧数量
+                    ])
+                
+                # 输出低延迟参数
+                ffmpeg_cmd.extend([
+                    '-f', 'flv',
+                    '-flvflags', 'no_duration_filesize',
+                    f'{device.rtmp_stream}'
+                ])
 
+                # 记录系统资源使用情况
+                def log_system_resources():
+                    try:
+                        # 获取CPU使用率（取最近1秒的平均值）
+                        cpu_usage = psutil.cpu_percent(interval=0.1)
+                        # 获取内存使用情况
+                        mem = psutil.virtual_memory()
+                        mem_usage = mem.percent
+                        mem_available = mem.available / (1024 ** 2)  # MB
+                        # 获取网络连接数
+                        net_connections = len(psutil.net_connections())
+                        # 获取FFmpeg进程数量
+                        ffmpeg_process_count = len([p for p in psutil.process_iter(['name']) if p.info['name'] == 'ffmpeg.exe'])
+                        
+                        logger.info(f"[资源监控] CPU: {cpu_usage}%, 内存: {mem_usage}%, 可用内存: {mem_available:.1f}MB, 网络连接数: {net_connections}, FFmpeg进程数: {ffmpeg_process_count}")
+                    except Exception as e:
+                        logger.warning(f"[资源监控] 获取系统资源失败: {str(e)}")
+                
+                # 记录启动前的资源使用情况
+                log_system_resources()
+                
                 # 启动进程并捕获错误流
                 self.process = subprocess.Popen(
                     ffmpeg_cmd,
@@ -80,22 +230,62 @@ class FFmpegDaemon:
                     text=False
                 )
                 logger.info(f"启动FFmpeg: {' '.join(ffmpeg_cmd)}")
+                logger.info(f"[进程监控] 设备: {self.device_id}, FFmpeg进程PID: {self.process.pid}")
 
-                # 实时监控输出（仅记录错误和警告）
+                # 实时监控输出（记录所有错误和警告）
+                error_logs = []
                 while self._running:
                     line = self.process.stderr.readline()
                     if not line:
                         break
                     line_str = line.decode().strip()
+                    error_logs.append(line_str)
                     # 只记录错误和警告信息
-                    if 'error' in line_str.lower() or 'warning' in line_str.lower() or 'failed' in line_str.lower():
+                    if 'error' in line_str.lower() or 'warning' in line_str.lower() or 'failed' in line_str.lower() or 'exception' in line_str.lower():
                         logger.warning(f"[FFmpeg:{self.device_id}] {line_str}")
 
                 # 进程结束后处理
                 return_code = self.process.wait()
+                restart_delay = 10  # 默认10秒后重试
+                
                 if return_code != 0:
                     logger.error(f"FFmpeg异常退出，返回码: {return_code}，设备: {self.device_id}")
+                    # 记录完整错误日志
+                    if error_logs:
+                        logger.error(f"[FFmpeg:{self.device_id}] 完整错误日志:\n" + chr(10).join(error_logs[:20]))  # 最多记录20行
+                        
+                    # 根据错误类型调整重试间隔
+                    error_text = chr(10).join(error_logs).lower()
+                    
+                    # 更新RTSP流状态
+                    with rtsp_status_lock:
+                        device_rtsp_status[self.device_id] = False
+                    
+                    if 'i/o error' in error_text and 'rtmp' in error_text:
+                        # RTMP I/O错误，可能是服务器暂时不可用，增加重试间隔
+                        restart_delay = 15
+                        logger.warning(f"[重试策略] 检测到RTMP I/O错误，调整重试间隔为 {restart_delay} 秒")
+                    elif 'connection refused' in error_text or 'connection reset' in error_text:
+                        # 连接被拒绝或重置，可能是网络问题，增加重试间隔
+                        restart_delay = 20
+                        logger.warning(f"[重试策略] 检测到连接错误，调整重试间隔为 {restart_delay} 秒")
+                    elif 'out of memory' in error_text or 'memory allocation' in error_text:
+                        # 内存不足，增加重试间隔并记录资源使用
+                        restart_delay = 30
+                        logger.warning(f"[重试策略] 检测到内存相关错误，调整重试间隔为 {restart_delay} 秒")
+                        log_system_resources()
+                    elif 'invalid data found when processing input' in error_text and 'rtsp' in error_text:
+                        # RTSP源错误，可能是摄像头离线，增加重试间隔
+                        restart_delay = 25
+                        logger.warning(f"[重试策略] 检测到RTSP源错误，调整重试间隔为 {restart_delay} 秒")
+                else:
+                    # 进程正常退出，更新RTSP流状态为可用
+                    with rtsp_status_lock:
+                        device_rtsp_status[self.device_id] = True
 
+                # 记录进程退出后的资源使用情况
+                log_system_resources()
+                
                 # 按需重启
                 if not self._running:
                     return
@@ -103,8 +293,8 @@ class FFmpegDaemon:
                     self._restart_flag = False
                     logger.info(f"设备 {self.device_id} 配置更新，立即重启")
                 else:
-                    logger.warning(f"设备 {self.device_id} 进程异常，10秒后重启...")
-                    time.sleep(10)  # 等待后重启
+                    logger.warning(f"设备 {self.device_id} 进程异常，{restart_delay}秒后重启...")
+                    time.sleep(restart_delay)  # 等待后重启
 
         threading.Thread(target=daemon_task, daemon=True).start()
 
@@ -1382,34 +1572,48 @@ def on_dvr_callback():
         logger.debug(f"on_dvr回调：处理后的文件路径 absolute_file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}")
         
         # 等待文件创建完成（SRS可能在回调时文件还在写入中）
-        max_retries = 10
-        retry_interval = 0.5  # 每次等待0.5秒
+        max_retries = 20  # 增加重试次数到20次
+        retry_interval = 1.0  # 每次等待1秒
         file_exists = False
         file_size = 0
         
+        logger.debug(f"on_dvr回调：开始检查文件 file_path={absolute_file_path}, max_retries={max_retries}, retry_interval={retry_interval}s")
+        
         for attempt in range(max_retries):
-            if os.path.exists(absolute_file_path):
+            # 检查文件是否存在
+            exists = os.path.exists(absolute_file_path)
+            logger.debug(f"on_dvr回调：文件存在检查 attempt={attempt + 1}, exists={exists}, file_path={absolute_file_path}")
+            
+            if exists:
                 # 检查文件大小是否稳定（文件可能还在写入中）
                 try:
                     size1 = os.path.getsize(absolute_file_path)
-                    time.sleep(0.2)  # 等待0.2秒
+                    logger.debug(f"on_dvr回调：文件大小检查1 attempt={attempt + 1}, size={size1} bytes, file_path={absolute_file_path}")
+                    
+                    time.sleep(0.3)  # 等待0.3秒
                     size2 = os.path.getsize(absolute_file_path)
+                    logger.debug(f"on_dvr回调：文件大小检查2 attempt={attempt + 1}, size={size2} bytes, file_path={absolute_file_path}")
+                    
                     if size1 == size2 and size1 > 0:
                         # 文件大小稳定且不为0，说明文件已创建完成
                         file_exists = True
                         file_size = size1
                         logger.debug(f"on_dvr回调：文件已就绪 file_path={absolute_file_path}, size={file_size} bytes, attempts={attempt + 1}")
                         break
+                    else:
+                        # 文件大小不稳定，继续等待
+                        logger.debug(f"on_dvr回调：文件大小不稳定 attempt={attempt + 1}, size1={size1}, size2={size2}, file_path={absolute_file_path}")
                 except OSError as e:
                     # 文件可能还在创建中，继续等待
-                    logger.debug(f"on_dvr回调：文件可能还在创建中 attempt={attempt + 1}, error={str(e)}")
+                    logger.debug(f"on_dvr回调：文件可能还在创建中 attempt={attempt + 1}, error={str(e)}, file_path={absolute_file_path}")
                     pass
             
             if attempt < max_retries - 1:
+                logger.debug(f"on_dvr回调：等待下次检查 attempt={attempt + 1}, remaining_retries={max_retries - attempt - 1}, file_path={absolute_file_path}")
                 time.sleep(retry_interval)
         
         if not file_exists:
-            logger.warning(f"on_dvr回调：录像文件不存在或仍在写入中 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}")
+            logger.warning(f"on_dvr回调：录像文件不存在或仍在写入中 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}, last_exists_check={exists}")
             return jsonify({'code': 0, 'msg': None})
         
         # 从文件路径中提取日期信息
