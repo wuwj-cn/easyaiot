@@ -412,7 +412,7 @@ def _safe_create_camera(camera: Device):
         # 参数验证错误，记录为调试信息
         logger.debug(f'初始化设备 {camera.id} 连接失败: {str(e)}')
     except Exception as e:
-        logger.warning(f'初始化设备 {camera.id} 连接失败: {str(e)}')
+        logger.error(f'初始化设备 {camera.id} 连接失败: {str(e)}')
 
 
 def _get_stream(rtsp_url: str, stream: int) -> str:
