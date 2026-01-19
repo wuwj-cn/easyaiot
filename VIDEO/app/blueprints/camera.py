@@ -1449,7 +1449,7 @@ def on_dvr_callback():
             return jsonify({'code': 0, 'msg': None})
         
         # 记录完整的回调数据用于调试
-        logger.debug(f"on_dvr回调：收到回调数据 {data}")
+        logger.info(f"on_dvr回调：收到回调数据 {data}")
         
         # 从回调数据中提取信息
         # SRS回调数据结构示例：
@@ -1572,10 +1572,12 @@ def on_dvr_callback():
         logger.debug(f"on_dvr回调：处理后的文件路径 absolute_file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}")
         
         # 等待文件创建完成（SRS可能在回调时文件还在写入中）
-        max_retries = 20  # 增加重试次数到20次
+        max_retries = 25  # 增加重试次数到25次
         retry_interval = 1.0  # 每次等待1秒
         file_exists = False
         file_size = 0
+        consecutive_stable_size = 0  # 连续稳定大小的次数
+        required_stable_count = 2  # 需要连续2次稳定
         
         logger.debug(f"on_dvr回调：开始检查文件 file_path={absolute_file_path}, max_retries={max_retries}, retry_interval={retry_interval}s")
         
@@ -1587,33 +1589,66 @@ def on_dvr_callback():
             if exists:
                 # 检查文件大小是否稳定（文件可能还在写入中）
                 try:
-                    size1 = os.path.getsize(absolute_file_path)
-                    logger.debug(f"on_dvr回调：文件大小检查1 attempt={attempt + 1}, size={size1} bytes, file_path={absolute_file_path}")
+                    current_size = os.path.getsize(absolute_file_path)
+                    logger.debug(f"on_dvr回调：文件大小检查 attempt={attempt + 1}, size={current_size} bytes, file_path={absolute_file_path}")
                     
-                    time.sleep(0.3)  # 等待0.3秒
-                    size2 = os.path.getsize(absolute_file_path)
-                    logger.debug(f"on_dvr回调：文件大小检查2 attempt={attempt + 1}, size={size2} bytes, file_path={absolute_file_path}")
+                    if current_size > 0:
+                        # 第一次检查到有效大小
+                        if file_size == 0:
+                            file_size = current_size
+                            consecutive_stable_size = 1
+                            logger.debug(f"on_dvr回调：第一次检测到有效大小 attempt={attempt + 1}, size={file_size} bytes, consecutive_stable={consecutive_stable_size}, file_path={absolute_file_path}")
+                        else:
+                            # 比较当前大小与之前的大小
+                            if current_size == file_size:
+                                consecutive_stable_size += 1
+                                logger.debug(f"on_dvr回调：大小稳定 attempt={attempt + 1}, size={file_size} bytes, consecutive_stable={consecutive_stable_size}, required={required_stable_count}, file_path={absolute_file_path}")
+                                
+                                # 如果连续稳定次数达到要求，文件就绪
+                                if consecutive_stable_size >= required_stable_count:
+                                    file_exists = True
+                                    logger.debug(f"on_dvr回调：文件已就绪 file_path={absolute_file_path}, size={file_size} bytes, attempts={attempt + 1}, consecutive_stable={consecutive_stable_size}")
+                                    break
+                            else:
+                                # 大小变化，重置计数器
+                                file_size = current_size
+                                consecutive_stable_size = 1
+                                logger.debug(f"on_dvr回调：大小变化 attempt={attempt + 1}, new_size={file_size} bytes, consecutive_stable={consecutive_stable_size}, file_path={absolute_file_path}")
                     
-                    if size1 == size2 and size1 > 0:
-                        # 文件大小稳定且不为0，说明文件已创建完成
-                        file_exists = True
-                        file_size = size1
-                        logger.debug(f"on_dvr回调：文件已就绪 file_path={absolute_file_path}, size={file_size} bytes, attempts={attempt + 1}")
-                        break
-                    else:
-                        # 文件大小不稳定，继续等待
-                        logger.debug(f"on_dvr回调：文件大小不稳定 attempt={attempt + 1}, size1={size1}, size2={size2}, file_path={absolute_file_path}")
                 except OSError as e:
                     # 文件可能还在创建中，继续等待
                     logger.debug(f"on_dvr回调：文件可能还在创建中 attempt={attempt + 1}, error={str(e)}, file_path={absolute_file_path}")
+                    # 重置计数器
+                    file_size = 0
+                    consecutive_stable_size = 0
                     pass
+            else:
+                # 文件不存在，重置计数器
+                file_size = 0
+                consecutive_stable_size = 0
             
             if attempt < max_retries - 1:
                 logger.debug(f"on_dvr回调：等待下次检查 attempt={attempt + 1}, remaining_retries={max_retries - attempt - 1}, file_path={absolute_file_path}")
                 time.sleep(retry_interval)
         
         if not file_exists:
-            logger.warning(f"on_dvr回调：录像文件不存在或仍在写入中 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}, last_exists_check={exists}")
+            # 最后一次检查文件是否存在，增加更多调试信息
+            final_exists = os.path.exists(absolute_file_path)
+            final_error = None
+            final_size = 0
+            try:
+                if final_exists:
+                    final_size = os.path.getsize(absolute_file_path)
+                    logger.warning(f"on_dvr回调：录像文件存在但大小不稳定 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}, final_exists={final_exists}, final_size={final_size} bytes")
+                else:
+                    # 检查目录是否存在
+                    file_dir = os.path.dirname(absolute_file_path)
+                    dir_exists = os.path.exists(file_dir)
+                    dir_perm = os.access(file_dir, os.R_OK) if dir_exists else False
+                    logger.warning(f"on_dvr回调：录像文件不存在 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}, final_exists={final_exists}, dir_exists={dir_exists}, dir_perm={dir_perm}")
+            except Exception as e:
+                final_error = str(e)
+                logger.warning(f"on_dvr回调：录像文件检查失败 file_path={absolute_file_path}, cwd={cwd}, original_file={file_path}, max_retries={max_retries}, final_exists={final_exists}, error={final_error}")
             return jsonify({'code': 0, 'msg': None})
         
         # 从文件路径中提取日期信息
