@@ -71,3 +71,4 @@ TASK/build/
 TASK/cmake-build-debug/
 
 **/__pycache__/
+.vscode/
