@@ -155,7 +155,7 @@ onMounted(() => {
 async function fetch(p = {}) {
   const {api, params} = props;
   if (api && isFunction(api)) {
-    const res = await api({...params, pageNo: page.value, pageSize: pageSize.value, ...p});
+    const res = await api({...params, pageNum: page.value, pageSize: pageSize.value, ...p});
     data.value = res.data;
     total.value = res.total;
     hideLoading();

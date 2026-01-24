@@ -1,13 +1,13 @@
 import {defHttp} from '@/utils/http/axios';
 
 // GB28181 API 前缀
-const GB28181_PREFIX = '/api/device/query';
-const CHANNEL_PREFIX = '/api/common/channel';
-const SERVER_PREFIX = '/api/server';
-const PROXY_PREFIX = '/api/proxy';
-const PLAYBACK_PREFIX = '/api/playback';
-const GB_RECORD_PREFIX = '/api/gb_record';
-const CLOUD_RECORD_PREFIX = '/api/cloud/record';
+const GB28181_PREFIX = '/gb28181/device/query';
+const CHANNEL_PREFIX = '/gb28181/common/channel';
+const SERVER_PREFIX = '/gb28181/server';
+const PROXY_PREFIX = '/gb28181/proxy';
+const PLAYBACK_PREFIX = '/gb28181/playback';
+const GB_RECORD_PREFIX = '/gb28181/gb_record';
+const CLOUD_RECORD_PREFIX = '/gb28181/cloud/record';
 
 /**
  * 通用请求封装
