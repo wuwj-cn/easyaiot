@@ -261,9 +261,12 @@ const datasetId = ref<number | undefined>(undefined);
 // 搜索关键词
 const searchKeyword = ref('');
 
+const aiLabelLoading = ref(false);
+
 // 图片列表
 const imageList = ref<any[]>([]);
 const filteredImageList = computed(() => {
+  console.log('imageList', imageList.value);
   if (!searchKeyword.value) return imageList.value;
   return imageList.value.filter(img => 
     img.name?.toLowerCase().includes(searchKeyword.value.toLowerCase())
@@ -333,11 +336,9 @@ const loadDatasetImages = async () => {
     const res = await getDatasetImagePage({
       datasetId: datasetId.value,
       pageNo: 1,
-      pageSize: 1000,
+      pageSize: 100,
     });
-    
-    if (res.code === 0) {
-      imageList.value = (res.data?.list || []).map((img: any) => ({
+    imageList.value = (res?.list || []).map((img: any) => ({
         ...img,
         annotations: img.annotations ? (typeof img.annotations === 'string' ? JSON.parse(img.annotations) : img.annotations) : []
       }));
@@ -345,7 +346,6 @@ const loadDatasetImages = async () => {
       if (imageList.value.length > 0 && !currentImageId.value) {
         selectImage(imageList.value[0]);
       }
-    }
   } catch (error) {
     console.error('加载图片列表失败:', error);
     createMessage.error('加载图片列表失败');
@@ -360,18 +360,16 @@ const loadLabels = async () => {
     const res = await getDatasetTagPage({
       datasetId: datasetId.value,
       pageNo: 1,
-      pageSize: 1000,
+      pageSize: 100,
     });
     
-    if (res.code === 0) {
-      labels.value = (res.data?.list || []).map((tag: any) => ({
+    labels.value = (res?.list || []).map((tag: any) => ({
         id: tag.id,
         name: tag.name,
         color: tag.color || '#52c41a',
         shortcut: tag.shortcut,
         description: tag.description
       }));
-    }
   } catch (error) {
     console.error('加载标签列表失败:', error);
     createMessage.error('加载标签列表失败');
@@ -987,7 +985,8 @@ const handleResize = () => {
 // 组件挂载
 onMounted(() => {
   // 从路由参数获取数据集ID
-  const id = route.params.id;
+  // const id = route.params.id;
+  const id = 1;
   if (id) {
     datasetId.value = Number(id);
     (window as any).__currentDatasetId__ = datasetId.value;
